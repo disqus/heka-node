@@ -1,94 +1,63 @@
-/*
- ***** BEGIN LICENSE BLOCK *****
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this file,
- * You can obtain one at http://mozilla.org/MPL/2.0/.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2012
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Rob Miller (rmiller@mozilla.com)
- *  Victor Ng (vng@mozilla.com)
- *
- ***** END LICENSE BLOCK *****
- */
 "use strict";
 
-var _ = require('underscore');
-var base = require('./base');
+const dgram = require("dgram");
+const base = require("./base");
 
-var UdpStream = function(host, port, hmc) {
+const UdpStream = function (hosts, ports, hmc) {
     this.init(hmc);
 
-    if (!Array.isArray(host))
-    {
-        host = [host];
-    }
+    if (!Array.isArray(hosts))
+        hosts = [hosts];
 
-    if (!Array.isArray(port))
-    {
-        port = [port];
-    }
+    if (!Array.isArray(ports))
+        ports = [ports];
 
-    /* 
+    /*
      * Multiple host/port support is included.
      * We extend missing port numbers to the last port in the list
      */
-    var num_extra_hosts = host.length - port.length;
-
-    for (var i=0; i<num_extra_hosts; i++)
-    {
-        port[port.length+i] = port[port.length-1];
-    }
-
-    this._destination = _.zip(host, port);
-    this.dgram = require('dgram');
+    this._destination = hosts.map((host, i) => [host, ports[i] || ports[ports.length - 1]]);
+    this.dgram = dgram;
 
 
-    this._send_msg = function(buffer) {
-        var client = this.dgram.createSocket("udp4");
+    this._send_msg = function (buffer) {
+        const client = this.dgram.createSocket("udp4");
 
-        _.each(this._destination, function(elem) {
-            var host = elem[0];
-            var port = elem[1];
-            // datagram sockets expect to write a Node.js Buffer
-            // object
-            client.send(buffer, 0, buffer.length, port, host, function(err, bytes) {
+        this._destination.forEach(elem => {
+            const host = elem[0];
+            const port = elem[1];
+            // datagram sockets expect to write a Node.js Buffer object
+            client.send(buffer, 0, buffer.length, port, host, (_err, _bytes) => {
                 client.close();
             });
-        })
+        });
     };
 
-    this.toString = function()
+    this.toString = function ()
     {
-        var result = "UdpStream ---\n";
-        _.each(this._destination, function(elem) {
-            var host = elem[0];
-            var port = elem[1];
-            result += "Destination : "+host+":"+port+"\n";
+        let result = "UdpStream ---\n";
+        this._destination.forEach(elem => {
+            const host = elem[0];
+            const port = elem[1];
+            result += `Destination : ${host}:${port}\n`;
         });
         result += "---UdpStream \n";
         return result;
     };
-
 };
 base.abstractStream.call(UdpStream.prototype);
 
 
-var udpStreamFactory = function(sender_config) {
-    var hosts = sender_config['hosts'];
-    var ports = sender_config['ports'];
-    // var encoder = sender_config['encoder'];
-    var hmc = sender_config['hmc'];
+const udpStreamFactory = function (config) {
+    const hosts = config.hosts;
+    const ports = config.ports;
+    // const encoder = sender_config.encoder;
+    const hmc = config.hmc;
 
-    if ((hosts == null) || (ports == null)) {
-        throw new Error("Invalid host/port combination: ["+hosts+"] ["+ports+"]");
-    }
+    if (!(hosts && ports))
+        throw new Error(`Invalid host/port combination: [${hosts}] [${ports}]`);
 
-    var sender = new UdpStream(hosts, ports, hmc);
-    return sender;
+    return new UdpStream(hosts, ports, hmc);
 };
 
 exports.udpStreamFactory = udpStreamFactory;

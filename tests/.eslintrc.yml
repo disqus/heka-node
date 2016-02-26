@@ -1,0 +1,5 @@
+env:
+    jasmine: true
+rules:
+    no-magic-numbers: 0
+    prefer-arrow-callback: 0

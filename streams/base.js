@@ -1,25 +1,10 @@
-/*
- ***** BEGIN LICENSE BLOCK *****
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this file,
- * You can obtain one at http://mozilla.org/MPL/2.0/.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2012
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Rob Miller (rmiller@mozilla.com)
- *  Victor Ng (vng@mozilla.com)
- *
- ***** END LICENSE BLOCK *****
- */
+"use strict";
 
-var crypto = require('crypto');
-var helpers = require('../message/helpers');
+const crypto = require("crypto");
+const message = require("../message");
 
 
-var abstractStream = function() {
+const abstractStream = function () {
     /*
      * This is an abstract stream which all streams should reuse.
      * Concrete Stream implementations must provide a _send_msg(buff)
@@ -27,45 +12,35 @@ var abstractStream = function() {
      * serialized message (and header if your wireformat requires
      * one).
      */
-    this.init = function(hmc) {
-        if (hmc === undefined) {
+    this.init = function (hmc) {
+        if (hmc === undefined)
             this.hmc = null;
-        } else {
+        else
             this.hmc = hmc;
-        }
     };
 
-    var message = require('../message');
+    this.buildHeader = function (msgBuffer) {
+        const header = new message.Header();
 
-    this.buildHeader = function(msg_buff, msg_length) {
-        var header = new message.Header();
-
-        header.message_length = msg_length;
-        if (this.hmc != null) {
-            var hmac = crypto.createHmac(this.hmc.hash_function, this.hmc.key);
-            hmac.update(msg_buff);
+        header.message_length = msgBuffer.length;
+        if (this.hmc !== null) {
+            const hmac = crypto.createHmac(this.hmc.hash_function, this.hmc.key);
 
             header.hmac_signer = this.hmc.signer;
 
             header.hmac_key_version = this.hmc.key_version;
 
-            // TODO: There's some kind of circular/lazy import problem
-            // with referencing the message.Header object so we have
-            // to bind as late as possible
-            var HASHNAME_TO_ENUM = { 'sha1': message.Header.HmacHashFunction.SHA1,
-                'md5': message.Header.HmacHashFunction.MD5};
+            header.hmac_hash_function = message.Header.HmacHashFunction[this.hmc.hash_function.toUpperCase()];
 
-
-            header.hmac_hash_function = HASHNAME_TO_ENUM[this.hmc.hash_function];
-            var digest = new Buffer(hmac.digest('binary'), 'binary')
-            header.hmac = digest;
+            hmac.update(msgBuffer);
+            header.hmac = hmac.digest();
         }
 
         return header;
     };
 
 
-    this.sendMessage = function(msg_buff) {
+    this.sendMessage = function (msgBuffer) {
         /*
          * Wire format is:
          *
@@ -73,29 +48,32 @@ var abstractStream = function() {
          * 1 byte : HEADER_LENGTH
          * N bytes : header
          * 1 byte : UNIT_SEPARATOR
-         * N bytes : messsage bytes
+         * N bytes : message bytes
          */
-        var header = this.buildHeader(msg_buff, msg_buff.length);
 
-        var header_buff = header.encode().toBuffer();
+        // Ensure we are going to use/hmac the buffer as it will be decoded by the client since they may differ
+        // sometimes with the introduction of actual underlying types (Long, Buffers etc.)
+        msgBuffer = message.Message.decode(msgBuffer).toBuffer();
 
-        var buff = new Buffer(2);
+        const header = this.buildHeader(msgBuffer);
+        const headerBuffer = header.toBuffer();
+
+        const buff = new Buffer(2);
         buff.writeUInt8(message.RECORD_SEPARATOR, 0);
-        buff.writeUInt8(header_buff.length, 1);
+        buff.writeUInt8(headerBuffer.length, 1);
 
-        var unit_buff = new Buffer(1);
-        unit_buff.writeUInt8(message.UNIT_SEPARATOR, 0);
+        const unitBuffer = new Buffer(1);
+        unitBuffer.writeUInt8(message.UNIT_SEPARATOR, 0);
 
 
-        var result_buff = Buffer.concat([buff, header_buff, unit_buff, msg_buff]);
+        const finalBuffer = Buffer.concat([buff, headerBuffer, unitBuffer, msgBuffer]);
 
         // The implementation of send_msg should *not* alter the
-        // content in anyway prior to transmission.  This ensures that
+        // content in anyway prior to transmission. This ensures that
         // switching to an alternate encoder is always safe.
-        this._send_msg(result_buff);
-        return result_buff;
+        this._send_msg(finalBuffer);
+        return finalBuffer;
     };
-
 };
 
 exports.abstractStream = abstractStream;

@@ -1,45 +1,59 @@
 {
-    "author": "Rob Miller <rmiller@mozilla.com>",
-    "contributors": [
-       {"name": "Victor Ng",
-        "email": "vng@mozilla.com"},
-       {"name": "Danny Coates",
-        "email": "dcoates@mozilla.com"}
-    ],
-    "name": "heka-node",
-    "description": "A node.js client for Mozilla's Heka logging server",
-    "version": "0.5.0",
-    "homepage": "https://github.com/mozilla-services/heka-node",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/mozilla-services/heka-node.git"
+  "author": "Rob Miller <rmiller@mozilla.com>",
+  "contributors": [
+    {
+      "name": "Victor Ng",
+      "email": "vng@mozilla.com"
     },
-    "bugs": "https://github.com/mozilla-services/heka-node/issues",
-    "licenses": [
-      {"type": "MPL 2.0",
-       "url": "http://mozilla.org/MPL/2.0/"}
-    ],
-    "main": "./client.js",
-    "files": ["protobuf/*.proto",
-              "message/*.js",
-              "streams/*.js",
-              "encoders/*.js",
-              "tests/*.js",
-              "*.js"],
-    "engines": {
-        "node": ">=0.10.0"
+    {
+      "name": "Danny Coates",
+      "email": "dcoates@mozilla.com"
     },
-    "dependencies": {
-        "bytebuffer": "1.3.6",
-        "protobufjs": ">=1.1.6",
-        "long": ">=1.1.2",
-        "underscore": ">=1.5.2"
-    },
-    "devDependencies": {
-        "jasmine-node": ">=1.6.0",
-        "horaa": ">=0.1.1alpha"
-    },
-    "scripts": {
-        "test": "jasmine-node --captureExceptions tests"
+    {
+      "name": "Burak Yigit Kaya",
+      "email": "byk@disqus.com"
     }
+  ],
+  "name": "heka-node",
+  "description": "A node.js client for Mozilla's Heka logging server",
+  "version": "0.6.0",
+  "homepage": "https://github.com/disqus/heka-node",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/disqus/heka-node.git"
+  },
+  "bugs": "https://github.com/disqus/heka-node/issues",
+  "licenses": [
+    {
+      "type": "MPL 2.0",
+      "url": "http://mozilla.org/MPL/2.0/"
+    }
+  ],
+  "main": "./client.js",
+  "files": [
+    "protobuf/*.proto",
+    "message/*.js",
+    "streams/*.js",
+    "encoders/*.js",
+    "tests/*.js",
+    "*.js"
+  ],
+  "engines": {
+    "node": ">=4.0.0"
+  },
+  "dependencies": {
+    "bytebuffer": "~5",
+    "protobufjs": "5.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^2.2.0",
+    "horaa": ">=0.1.1alpha",
+    "jasmine-node": ">=1.6.0",
+    "long": ">=1.1.2",
+    "restify": ">=2.8.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "jasmine-node --captureExceptions tests"
+  }
 }

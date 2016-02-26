@@ -1,37 +1,19 @@
-/*
- ***** BEGIN LICENSE BLOCK *****
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this file,
- * You can obtain one at http://mozilla.org/MPL/2.0/.
- *
- * The Initial Developer of the Original Code is the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2012
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Rob Miller (rmiller@mozilla.com)
- *  Victor Ng (vng@mozilla.com)
- *
- ***** END LICENSE BLOCK *****
- */
 "use strict";
 
-var streams = require('./streams/index');
-var _ = require('underscore');
-var config = require('./config');
-var env_version = '0.8';
-var message = require('./message');
-var helpers = require('./message/helpers');
-var BoxedFloat = helpers.BoxedFloat;
-var Field = message.Field;
-var os = require('os');
+const streams = require("./streams/index");
+const config = require("./config");
+const ENV_VERSION = "0.8";
+const message = require("./message");
+const helpers = require("./message/helpers");
+const os = require("os");
 
-var uuid = require('./uuid');
-var compute_oid_uuid = uuid.compute_oid_uuid;
-var dict_to_fields = helpers.dict_to_fields;
+const uuid = require("./uuid");
+const computeOidUUID = uuid.compute_oid_uuid;
+const dictToFields = helpers.dictToFields;
 
 // Put a namespace around RFC 3164 syslog messages
-var SEVERITY = {
+/* eslint-disable no-magic-numbers */
+const SEVERITY = {
     EMERGENCY: 0,
     ALERT: 1,
     CRITICAL: 2,
@@ -39,229 +21,194 @@ var SEVERITY = {
     WARNING: 4,
     NOTICE: 5,
     INFORMATIONAL: 6,
-    DEBUG: 7
-}
+    DEBUG: 7,
+};
+/* eslint-enable no-magic-numbers */
 
-var PB_NAMETYPE_TO_INT = {'STRING': 0,
-                          'BYTES': 1,
-                          'INTEGER': 2,
-                          'DOUBLE': 3,
-                          'BOOL': 4};
-
-var PB_TYPEMAP = {0: 'STRING',
-                  1: 'BYTES',
-                  2: 'INTEGER',
-                  3: 'DOUBLE',
-                  4: 'BOOL'};
-
-var PB_FIELDMAP = {0: 'value_string',
-                   1: 'value_bytes',
-                   2: 'value_integer',
-                   3: 'value_double',
-                   4: 'value_bool'};
-
-function DateToNano(d) {
+function dateInNano(date) {
     // TODO: this needs to return an instance of Long.js's Long object
     // as JS doesn't support int64 out of the box
-    return d.getTime() * 1000000;
+    const MILLISECONDS_IN_NANOSECOND = 1000000;
+    return date.getTime() * MILLISECONDS_IN_NANOSECOND;
 }
 
-
-var HekaClient = function(stream, logger, severity, disabledTimers, filters)
-{
+const HekaClient = function (stream, logger, severity, disabledTimers, filters) {
     this.setup(stream, logger, severity, disabledTimers, filters);
 };
 
-HekaClient.prototype.setup = function(stream, logger, severity, disabledTimers,
-        filters)
-{
+HekaClient.prototype.setup = function (stream, logger, severity, disabledTimers, filters ) {
     this.stream = stream;
-    this.logger = typeof(logger) != 'undefined' ? logger : '';
-    this.severity = typeof(severity) != 'undefined' ? severity : SEVERITY.INFORMATIONAL;
-    this.disabledTimers = typeof(disabledTimers) != 'undefined' ? disabledTimers : [];
-    this.filters = typeof(filters) != 'undefined' ? filters : [];
+    this.logger = logger || "";
+    this.severity = severity || SEVERITY.INFORMATIONAL;
+    this.disabledTimers = new Set(disabledTimers);
+    this.filters = Array.isArray(filters) ? filters : [];
     this._dynamicMethods = {};
 
     this.pid = process.pid;
     this.hostname = os.hostname();
-
 };
 
-HekaClient.prototype._sendMessage = function(msg_obj) {
+HekaClient.prototype._sendMessage = function (msgObj) {
     // Apply any filters and pass on the stream if message gets through
-    for (var i=0; i<this.filters.length; i++) {
-        var filter = this.filters[i];
-        if (!filter(msg_obj)) {
-            return;
-        };
-    };
-    this.stream.sendMessage(msg_obj.encode().toBuffer());
+    if (this.filters.some(filter => !filter(msgObj)))
+        return;
+
+    this.stream.sendMessage(msgObj.toBuffer());
 };
 
-HekaClient.prototype.heka = function(type, opts) {
-    if (opts === undefined) opts = {};
+HekaClient.prototype.heka = function (type, opts) {
+    const options = Object.assign({}, {
+        timestamp: dateInNano(new Date()),
+        logger: this.logger,
+        severity: this.severity,
+        payload: "",
+        fields: {},
+        pid: this.pid,
+        hostname: this.hostname,
+    }, opts || {});
 
-    if (opts.timestamp === undefined) opts.timestamp = DateToNano(new Date());
-    if (opts.logger === undefined) opts.logger = this.logger;
-    if (opts.severity === undefined) opts.severity = this.severity;
-    if (opts.payload === undefined) opts.payload = '';
-    if (opts.fields === undefined) opts.fields = {};
-    if (opts.pid === undefined) opts.pid = this.pid;
-    if (opts.hostname === undefined) opts.hostname = this.hostname;
-
-    var msg = new message.Message();
-    msg.timestamp = opts.timestamp;
+    const msg = new message.Message();
+    msg.timestamp = options.timestamp;
 
     msg.type = type;
-    msg.logger = opts.logger;
-    msg.severity = opts.severity;
-    msg.payload = opts.payload;
+    msg.logger = options.logger;
+    msg.severity = options.severity;
+    msg.payload = options.payload;
 
-    var fields = dict_to_fields(opts.fields);
-    for (var i = 0; i < fields.length; i++) {
-        msg.fields.push(fields[i]);
-    }
+    msg.fields.push.apply(msg.fields, dictToFields(options.fields));
 
-    msg.env_version = env_version;
-    msg.pid =  opts.pid;
-    msg.hostname = opts.hostname;
+    msg.env_version = ENV_VERSION;
+    msg.pid = options.pid;
+    msg.hostname = options.hostname;
 
-    msg.uuid = '0000000000000000';
-
-    var msg_buffer = msg.encode().toBuffer();
-
-    msg.uuid = compute_oid_uuid(msg_buffer);
+    msg.uuid = "0000000000000000";
+    msg.uuid = computeOidUUID(msg.toBuffer());
 
     this._sendMessage(msg);
 };
 
+HekaClient.prototype.addMethod = function (name, method, override) {
+    if (typeof method !== "function")
+        throw new Error("`method` argument must be a function");
 
-HekaClient.prototype.addMethod = function(name, method, override) {
-    if (typeof method !== 'function') {
-        throw new Error('`method` argument must be a function');
-    };
-    if (!override && name in this) {
-        throw new Error('The name ' + name + ' is already in use');
-    };
+    if (!override && name in this)
+        throw new Error(`The name ${name} is already in use`);
+
     this._dynamicMethods[name] = method;
     this[name] = method;
 };
 
-HekaClient.prototype.incr = function(name, opts, sample_rate) {
+HekaClient.prototype.incr = function (name, opts, sampleRate) {
     // opts = count, timestamp, logger, severity, fields
-    if (opts === undefined) opts = {};
-    if (opts.count === undefined) opts.count = 1;
-    if (opts.fields === undefined) opts.fields = {};
+    const options = Object.assign({}, {
+        count: 1,
+        fields: {},
+    }, opts || {});
 
-    if (typeof sample_rate === 'undefined') {
-        sample_rate = new BoxedFloat(1);
-    }
+    if (typeof sampleRate === "undefined")
+        sampleRate = 1;
 
-    opts.payload = String(opts.count);
-    opts.fields['name'] = name;
-    opts.fields['rate'] = sample_rate;
+    options.payload = String(options.count);
+    options.fields.name = name;
+    options.fields.rate = sampleRate;
 
-    if (sample_rate < 1 && Math.random(1) >= sample_rate) {
-        // do nothing
+    if (sampleRate <= Math.random())
         return;
-    };
-    this.heka('counter', opts);
+
+    this.heka("counter", options);
 };
 
-HekaClient.prototype.timer_send = function(elapsed, name, opts) {
+HekaClient.prototype.timer_send = function (elapsed, name, opts) {
     // opts = timestamp, logger, severity, fields, rate
-    if (opts === undefined) opts = {};
-    if (opts.rate === undefined) opts.rate = new BoxedFloat(1);
-    if (opts.rate < 1 && Math.random(1) >= opts.rate) {
-        // do nothing
+    const options = Object.assign({}, {
+        rate: 1,
+        fields: {},
+    }, opts || {});
+
+    if (options.rate <= Math.random())
         return;
-    };
-    if (opts.fields === undefined) opts.fields = {};
-    opts.fields['name'] = name;
-    opts.fields['rate'] = opts.rate;
-    opts.payload = String(elapsed);
-    this.heka('timer', opts);
+
+    options.fields.name = name;
+    options.fields.rate = options.rate;
+    options.payload = String(elapsed);
+
+    this.heka("timer", options);
 };
 
-HekaClient.prototype.timer = function(fn, name, opts) {
-    if (opts === undefined) opts = {};
-    if (opts.rate === undefined) opts.rate = new BoxedFloat(1);
+HekaClient.prototype.timer = function (fn, name, opts) {
+    const options = Object.assign({}, {
+        rate: 1,
+    }, opts || {});
 
-    var NoOpTimer = function() {
+    const noOpTimer = function () {
         return null;
-    }
+    };
 
     // Check if this is a disabled timer
-    if (_.contains(this.disabledTimers, name) || _.contains(this.disabledTimers, '*'))
-    {
-        return NoOpTimer;
-    }
+    if (this.disabledTimers.has(name) || this.disabledTimers.has("*"))
+        return noOpTimer;
 
-    // Check rate to see if we need to skip this
-    if ((opts.rate < 1.0) && (Math.random() >= opts.rate))
-    {
-        return NoOpTimer;
-    }
+    if (options.rate <= Math.random())
+        return noOpTimer;
 
-    var currentClient = this;
-
-    return function() {
-        var startTime = new Date().getTime();
+    const _this = this;
+    return function () {
+        const startTime = Date.now();
         // The decorated function may yield during invocation
         // so the timer may return a higher value than the actual
         // execution time of *just* the decorated function
-        var retVal = fn.apply(this, arguments);
-        var endTime = new Date().getTime();
-        var elapsed = endTime - startTime;
-        currentClient.timer_send(elapsed, name, opts);
+        const retVal = fn.apply(this, arguments);
+        const elapsed = Date.now() - startTime;
+
+        _this.timer_send(elapsed, name, opts);
         return retVal;
     };
 };
 
-HekaClient.prototype._oldstyle = function(severity, msg, opts) {
-    if (opts === undefined) opts = {};
-    if (opts.fields === undefined) opts.fields = {};
-    opts.severity = opts.severity || severity;
-    opts.payload = String(msg);
-    this.heka('oldstyle', opts);
-}
+HekaClient.prototype._oldStyle = function (severity, msg, opts) {
+    const options = Object.assign({}, {
+        fields: {},
+        severity,
+    }, opts || {});
 
-HekaClient.prototype.debug = function(msg, opts) {
-    this._oldstyle(SEVERITY.DEBUG, msg, opts);
-}
+    options.payload = String(msg);
+    this.heka("oldstyle", options);
+};
 
-HekaClient.prototype.info = function(msg, opts) {
-    this._oldstyle(SEVERITY.INFORMATIONAL, msg, opts);
-}
+HekaClient.prototype.debug = function (msg, opts) {
+    this._oldStyle(SEVERITY.DEBUG, msg, opts);
+};
 
-HekaClient.prototype.warn = function(msg, opts) {
-    this._oldstyle(SEVERITY.WARNING, msg, opts);
-}
+HekaClient.prototype.info = function (msg, opts) {
+    this._oldStyle(SEVERITY.INFORMATIONAL, msg, opts);
+};
 
-HekaClient.prototype.notice = function(msg, opts) {
-    this._oldstyle(SEVERITY.NOTICE, msg, opts);
-}
+HekaClient.prototype.warn = function (msg, opts) {
+    this._oldStyle(SEVERITY.WARNING, msg, opts);
+};
 
-HekaClient.prototype.error = function(msg, opts) {
-    this._oldstyle(SEVERITY.ERROR, msg, opts);
-}
+HekaClient.prototype.notice = function (msg, opts) {
+    this._oldStyle(SEVERITY.NOTICE, msg, opts);
+};
 
-HekaClient.prototype.exception = function(msg, opts) {
-    this._oldstyle(SEVERITY.ALERT, msg, opts);
-}
+HekaClient.prototype.error = function (msg, opts) {
+    this._oldStyle(SEVERITY.ERROR, msg, opts);
+};
 
-HekaClient.prototype.critical = function(msg, opts) {
-    this._oldstyle(SEVERITY.CRITICAL, msg, opts);
-}
+HekaClient.prototype.exception = function (msg, opts) {
+    this._oldStyle(SEVERITY.ALERT, msg, opts);
+};
+
+HekaClient.prototype.critical = function (msg, opts) {
+    this._oldStyle(SEVERITY.CRITICAL, msg, opts);
+};
 
 
 
-/***************************/
+/** *************************/
 
-exports.BoxedFloat = BoxedFloat;
-exports.DateToNano = DateToNano;
+exports.dateInNano = dateInNano;
 exports.HekaClient = HekaClient;
-exports.clientFromJsonConfig = config.clientFromJsonConfig;
 exports.createClient = config.createClient;
 exports.SEVERITY = SEVERITY;
 exports.streams = streams;

@@ -1,3 +1,4 @@
+"use strict";
 /*
  * This is a simple HTTP server which responds to
  *
@@ -17,32 +18,31 @@
  *    address = "127.0.0.1:5565"
  *
  *    [LogOutput]
- *    message_matcher = "Type == 'counter' || Type == 'timer'" 
+ *    message_matcher = "Type == 'counter' || Type == 'timer'"
  *    payload_only = false
  * -----
  *
  */
-"use strict";
 
-var heka = require('heka-node');
-var _ = require('underscore');
-var restify = require('restify');
+const restify = require("restify");
+const heka = require("../client");
 
-var heka_CONF = {
-    'stream': {'factory': 'heka-node/streams:udpStreamFactory',
-               'hosts': 'localhost',
-               'ports': 4880,
-               'encoder': 'heka-node/senders/encoders:protobufEncoder'
+/* eslint-disable no-magic-numbers */
+const HEKA_CONF = {
+    stream: {
+        factory: "./streams:udpStreamFactory",
+        hosts: "localhost",
+        ports: 4880,
     },
-    'logger': 'test',
-    'severity': 5
+    logger: "test",
+    severity: 5,
 };
-var jsonConfig = JSON.stringify(heka_CONF);
-var log = heka.clientFromJsonConfig(jsonConfig);
+/* eslint-enable no-magic-numbers */
+const log = heka.createClient(HEKA_CONF);
 
-var server = restify.createServer({
-      name: 'myapp',
-      version: '1.0.0'
+const server = restify.createServer({
+    name: "myapp",
+    version: "1.0.0",
 });
 server.use(restify.acceptParser(server.acceptable));
 server.use(restify.queryParser());
@@ -50,23 +50,24 @@ server.use(restify.bodyParser());
 
 function block(ms) {
     // naive cpu consuming "sleep", should never be used in real code
-    var start = new Date();
-    var now;
-    do {
-        now = new Date();
+    const start = Date.now();
+    let now;
+    do {  // eslint-disable-line curly
+        now = Date.now();
     } while (now - start < ms);
-};
+}
 
-var echo_func = function(request, response, next) {
+const echoHandler = function (request, response, next) {
+    /* eslint-disable no-magic-numbers */
     // Send incr() messages 90% of the time
-    log.incr('demo.node.incr_thing', {count:2, my_meta:42}, new heka.BoxedFloat(0.9));
+    log.incr("demo.node.incr_thing", { count: 2, my_meta: 42 }, 0.9);
     response.send(request.params);
     block(10);
     return next();
 };
 
-server.get('/echo/:name', log.timer(echo_func, 'timed_echo'));
+server.get("/echo/:name", log.timer(echoHandler, "timed_echo"));
 
-server.listen(8000, function () {
-      console.log('%s listening at %s', server.name, server.url);
+server.listen(8000, function () {  // eslint-disable-line prefer-arrow-callback
+    console.log("%s listening at %s", server.name, server.url);  // eslint-disable-line no-console
 });

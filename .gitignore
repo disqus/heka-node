@@ -1,6 +1,4 @@
 *~
 *.swp
-/node_modules
-/docs/build
+docs/build
 node_modules
-/bin
