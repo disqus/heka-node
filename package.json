@@ -30,14 +30,6 @@
     }
   ],
   "main": "./client.js",
-  "files": [
-    "protobuf/*.proto",
-    "message/*.js",
-    "streams/*.js",
-    "encoders/*.js",
-    "tests/*.js",
-    "*.js"
-  ],
   "engines": {
     "node": ">=4.0.0"
   },
